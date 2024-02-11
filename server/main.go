@@ -45,8 +45,8 @@ func main() {
 	logPath := flag.String("log-file", "", "Path to log file (empty means stderr)")
 	flag.Parse()
 
-	username = os.Getenv("TRACKME_USERNAME")
-	password = os.Getenv("TRACKME_PASSWORD")
+	username = os.Getenv("LOGME_USERNAME")
+	password = os.Getenv("LOGME_PASSWORD")
 
 	if *logPath != "" {
 		f, err := os.OpenFile(*logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
