@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+
+<html lang="en-US">
+
+<head>
+  <title>TrackMe</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://unpkg.com/htmx.org@1.9.5"></script>
+  <script src="https://unpkg.com/vue@3"></script>
+<style>
+h1, h2, h3 {
+  text-align: center;
+}
+table, th, td {
+  border: 1px solid black;
+  border-collapse: collapse;
+}
+th, td {
+  padding: 5px;
+}
+.flex-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+#main {
+}
+#new-log-form {
+}
+#sort-filters-form {
+  border: 1px solid black;
+  margin: 2px;
+}
+#sort-div > div {
+  display: inline-block;
+  margin: 2px;
+}
+#filter-div > div {
+  margin: 2px;
+}
+#reset-cancel-buttons-div > button {
+  margin: 2px;
+}
+#check-buttons > button {
+  margin: 0px 5px 2px 5px;
+}
+#login-form > div {
+  margin: 2px;
+}
+</style>
+</head>
+
+<body>
+  <div id="app">
+    <div id="login" v-if="!loggedIn">
+      <form id="login-form" class="flex-column" @submit="login">
+        <div>
+          <label for="username">Username:</label>
+          <input type="text" name="username" placeholder="username" v-model="username"/>
+        </div>
+        <div>
+          <label for="password">Password:</label>
+          <input type="password" name="password" placeholder="password" v-model="password"/>
+        </div>
+        <div>
+          <button type="submit">Submit</button>
+        </div>
+      </form>
+    </div>
+    <div id="main" class="flex-column" v-else>
+      <form id="new-log-form" class="flex-column" @submit="submitNewLog">
+        <h3>New Message</h3>
+        <div>
+          <input
+          type="text" name="msg"
+          size="80" placeholder="Message" autocomplete="off"
+          v-model="newLog.msg" />
+        </div>
+
+        <div>
+          <input type="datetime-local" name="timestamp" v-model="newLog.timestamp" />
+          <button type="button" style="margin-left:2px" @click="setTimestampNow">Now</button>
+        </div>
+
+        <button type="submit" style="margin:2px">Submit</button>
+      </form>
+
+      <hr style="width:90%" />
+
+      <button @click="showingSortFilters = !showingSortFilters">
+        <span v-if="showingSortFilters">Hide</span><span v-else>Show</span> Short/Filters
+      </button>
+
+      <form
+        id="sort-filters-form" class="flex-column"
+        @submit="getLogs" v-if="showingSortFilters">
+        <div id="sort-div">
+          <div>
+            <label for="sort">Sort By:</label>
+            <select name="sort" v-model="newSortFilters.sort">
+              <option value="id" selected>ID</option>
+              <option value="timestamp">Time</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="desc">Desc:</label>
+            <input type="checkbox" name="desc" v-model="newSortFilters.desc" />
+          </div>
+        </div>
+        <hr style="width:90%" />
+
+        <div id="filter-div">
+          <div>
+            <label for="start">Start:</label>
+            <input type="datetime-local" name="start" v-model="newSortFilters.start" />
+          </div>
+          <div>
+            <label for="end">End:</label>
+            <input type="datetime-local" name="end" v-model="newSortFilters.end" />
+          </div>
+
+          <div>
+            <label for="limit">Limit:</label>
+            <input
+            type="number" name="limit"
+            min="1" step="1" size="6"
+            v-model="newSortFilters.limit" />
+          </div>
+          <div>
+            <label for="offset">Offset:</label>
+            <input
+            type="number" name="offset"
+            min="0" step="1" size="8"
+            v-model="newSortFilters.offset" />
+          </div>
+        </div>
+        <hr style="width:90%" />
+
+        <div id="reset-cancel-buttons-div">
+          <button onclick="resetSortFilters()">Reset</button>
+          <button type="submit">Apply</button>
+        </div>
+      </form>
+
+      <div>
+        <button @click="getLogs" style="margin:2px">Refresh</button>
+      </div>
+
+      <div id="check-buttons">
+        <button @click="uncheckAll">Uncheck All</button>
+        <button @click="checkAll">Check All</button>
+        <button @click="deleteChecked">Delete Checked</button>
+      </div>
+
+      <table>
+        <tr>
+          <th>Time</th>
+          <th>Message</th>
+          <th></th>
+        </tr>
+        <tr v-for="(log, i) in logs">
+          <td>{{tsToDateTimeStr(log.timestamp)}}</td>
+          <td>{{log.msg}}</td>
+          <td><input type="checkbox" v-model="checkedLogs[i]" /></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    function dtlStrToTs(str) {
+      return Math.floor((new Date(str)).getTime() / 1000);
+    }
+    const App = {
+      data() {
+        const sortFilters = {
+          sort: "id",
+          desc: true,
+          start: "",
+          end: "",
+          limit: 50,
+          offset: 0
+        };
+        return {
+          loggedIn: false,
+          username: "",
+          password: "",
+          authStr: "",
+          showingSortFilters: false,
+          logs: [],
+          checkedLogs: [],
+          newLog: {},
+          newSortFilters: Object.assign({}, sortFilters),
+          sortFilters: sortFilters,
+          _blank: null 
+        };
+      },
+      methods: {
+        async login(ev) {
+          ev.preventDefault();
+          this.authStr = btoa(`${this.username}:${this.password}`);
+          const resp = await fetch("/login", {
+            "method": "POST",
+            "headers": {"Authorization": `Basic ${this.authStr}`}
+          });
+          if (!resp.ok) {
+            alert(await resp.text());
+            return;
+          }
+          this.loggedIn = true;
+        },
+        setTimestampNow() {
+          const now = new Date();
+          now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+          this.newLog.timestamp = now.toISOString().slice(0, 16);
+        },
+        resetSortFilters() {
+          this.showingSortFilters = false;
+          this.newSortFilters = Object.assign({}, this.sortFilters);
+        },
+        async submitNewLog(ev) {
+          ev.preventDefault();
+          let timestamp = undefined;
+          if (this.newLog.timestamp != "") {
+            timestamp = Math.floor((new Date(this.newLog.timestamp)).getTime() / 1000);
+          }
+          const log = {"timestamp": timestamp, "msg": this.newLog.msg};
+          this.newLog = {};
+          const resp = await fetch(`/logs`, {
+            "method": "POST",
+            "headers": {"Authorization": `Basic ${this.authStr}`},
+            "body": JSON.stringify(log)
+          });
+          if (!resp.ok) {
+            alert(await resp.text());
+            return;
+          }
+          alert("Success");
+        },
+        async getLogs(ev) {
+          ev.preventDefault();
+          this.showingSortFilters = false;
+          this.sortFilters = Object.assign({}, this.newSortFilters);
+
+          const parts = [
+            `sort=${this.sortFilters.sort}`,
+            `desc=${this.sortFilters.desc}`,
+            `limit=${this.sortFilters.limit}`,
+            `offset=${this.sortFilters.offset}`
+          ];
+          if (this.sortFilters.start != "") {
+            parts.push(`start=${dtlStrToTs(this.sortFilters.start)}`);
+          }
+          if (this.sortFilters.end != "") {
+            parts.push(`end=${dtlStrToTs(this.sortFilters.end)}`);
+          }
+
+          const query = parts.join("&");
+          const resp = await fetch(`/logs?${query}`, {
+            "headers": {"Authorization": `Basic ${this.authStr}`}
+          });
+
+          if (!resp.ok) {
+            alert(await resp.text());
+            return;
+          }
+
+          const json = await resp.json();
+          this.logs = json.logs ?? [];
+          this.checkedLogs = Array(this.logs.length).fill(false);
+          if (json.error !== undefined) {
+            alert(`Partial error:\n${json.error}`);
+          } else {
+            alert("Success");
+          }
+        },
+        async deleteChecked() {
+          const ids = [];
+          for (var i = 0; i < this.logs.length; i++) {
+            if (this.checkedLogs[i]) {
+              ids.push(this.logs[i].id);
+            }
+          }
+          if (ids.length == 0) {
+            return;
+          }
+          const resp = await fetch(`/logs?ids=${ids.join(",")}`, {
+            "method": "DELETE",
+            "headers": {"Authorization": `Basic ${this.authStr}`}
+          });
+          if (!resp.ok) {
+            alert(await resp.text());
+          } else {
+            alert("Success");
+          }
+        },
+        uncheckAll() {
+          this.checkedLogs = Array(this.logs.length).fill(false);
+        },
+        checkAll() {
+          this.checkedLogs = Array(this.logs.length).fill(true);
+        },
+        tsToDateTimeStr(timestamp) {
+          const date = new Date(timestamp * 1000);
+          return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+        }
+      }
+    };
+    Vue.createApp(App).mount("#app");
+  </script>
+</body>
+
+</html>
