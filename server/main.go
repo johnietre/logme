@@ -18,9 +18,9 @@ import (
 )
 
 var (
-	db                 *sql.DB
-	indexPath          string
-	username, password string
+	db                                 *sql.DB
+	indexPath, manifestPath, iconsPath string
+	username, password                 string
 )
 
 func init() {
@@ -37,6 +37,8 @@ func init() {
 	}
 
 	indexPath = filepath.Join(thisDir, "index.html")
+	manifestPath = filepath.Join(thisDir, "manifest.json")
+	iconsPath = filepath.Join(thisDir, "icons/ios")
 }
 
 func main() {
@@ -57,6 +59,13 @@ func main() {
 	}
 
 	http.HandleFunc("/", homeHandler)
+	http.HandleFunc("/manifest.json", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, manifestPath)
+	})
+	http.Handle(
+		"/icons/",
+		http.StripPrefix("/icons", http.FileServer(http.Dir(iconsPath))),
+	)
 	http.Handle("/login", authMiddleware(http.HandlerFunc(loginHandler)))
 	http.Handle("/logs", authMiddleware(http.HandlerFunc(logsHandler)))
 	logpkg.Printf("Running on %s", *addr)
