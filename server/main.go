@@ -95,11 +95,14 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func logsHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
 		handleGetLogs(w, r)
-	} else if r.Method == http.MethodPost {
+	case http.MethodPost:
 		handleNewLog(w, r)
-	} else if r.Method == http.MethodDelete {
+	case http.MethodPut:
+		handleEditLog(w, r)
+	case http.MethodDelete:
 		handleDeleteLog(w, r)
 	}
 }
@@ -208,9 +211,12 @@ func handleGetLogs(w http.ResponseWriter, r *http.Request) {
 func handleNewLog(w http.ResponseWriter, r *http.Request) {
 	log := Log{}
 	if err := json.NewDecoder(r.Body).Decode(&log); err != nil {
-		errStr := fmt.Sprintf("error decoding body: %v", err)
-		logpkg.Printf(errStr)
-		http.Error(w, "Internal Server Error: "+errStr, http.StatusInternalServerError)
+		/*
+			errStr := fmt.Sprintf("error decoding body: %v", err)
+			logpkg.Printf(errStr)
+			http.Error(w, "Internal Server Error: "+errStr, http.StatusInternalServerError)
+		*/
+		http.Error(w, fmt.Sprintf("bad json: %v", err), http.StatusBadRequest)
 		return
 	}
 	if log.Timestamp <= 0 {
@@ -236,6 +242,29 @@ func handleNewLog(w http.ResponseWriter, r *http.Request) {
 	log.Id = uint64(id)
 	if err := json.NewEncoder(w).Encode(log); err != nil {
 		logpkg.Printf("error writing new json result: %v", err)
+	}
+}
+
+func handleEditLog(w http.ResponseWriter, r *http.Request) {
+	idStr := r.FormValue("id")
+	id, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil || idStr == "" {
+		http.Error(w, fmt.Sprintf("invalid or missing id: %s", idStr), http.StatusBadRequest)
+		return
+	}
+	log := Log{Id: id}
+	if err := json.NewDecoder(r.Body).Decode(&log); err != nil {
+		http.Error(w, fmt.Sprintf("bad json: %v", err), http.StatusBadRequest)
+		return
+	}
+	_, err = db.Exec(
+		`UPDATE logs SET msg=?,timestamp=? WHERE id=?`,
+		log.Msg, log.Timestamp, log.Id,
+	)
+	if err != nil {
+		errStr := fmt.Sprintf("error updating log with ID %d: %v", log.Id, err)
+		logpkg.Print(errStr)
+		http.Error(w, "Internal Server Error: "+errStr, http.StatusInternalServerError)
 	}
 }
 
