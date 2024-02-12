@@ -18,6 +18,13 @@ table, th, td {
 }
 th, td {
   padding: 5px;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+table {
+  /*
+  max-width: 90vw;
+  */
 }
 .flex-column {
   display: flex;
@@ -27,6 +34,7 @@ th, td {
 #main {
 }
 #new-log-form {
+  width: 100%;
 }
 #sort-filters-form {
   border: 1px solid black;
@@ -69,12 +77,16 @@ th, td {
       </form>
     </div>
     <div id="main" class="flex-column" v-else>
-      <form id="new-log-form" class="flex-column" @submit="submitNewLog">
-        <h3>New Message</h3>
+      <form id="new-log-form" class="flex-column" @submit="submitLog">
+        <h3>
+          <span v-if="editingLog<0">New</span>
+          <span v-else>Editing</span>
+          Log
+        </h3>
         <div>
           <input
           type="text" name="msg"
-          size="80" placeholder="Message" autocomplete="off"
+          style="width:95vw" placeholder="Message" autocomplete="off"
           v-model="newLog.msg" />
         </div>
 
@@ -83,7 +95,10 @@ th, td {
           <button type="button" style="margin-left:2px" @click="setTimestampNow">Now</button>
         </div>
 
-        <button type="submit" style="margin:2px">Submit</button>
+        <div>
+          <button type="button" v-if="editingLog>=0" @click="cancelEditing">Cancel</button>
+          <button type="submit" style="margin:2px">Submit</button>
+        </div>
       </form>
 
       <hr style="width:90%" />
@@ -99,8 +114,8 @@ th, td {
           <div>
             <label for="sort">Sort By:</label>
             <select name="sort" v-model="newSortFilters.sort">
-              <option value="id" selected>ID</option>
-              <option value="timestamp">Time</option>
+              <option value="timestamp" selected>Time</option>
+              <option value="id">ID</option>
             </select>
           </div>
 
@@ -154,16 +169,23 @@ th, td {
         <button @click="deleteChecked">Delete Checked</button>
       </div>
 
-      <table>
-        <tr>
-          <th>Time</th>
-          <th>Message</th>
-          <th></th>
-        </tr>
+      <table width="100%">
         <tr v-for="(log, i) in logs">
-          <td>{{tsToDateTimeStr(log.timestamp)}}</td>
-          <td>{{log.msg}}</td>
-          <td><input type="checkbox" v-model="checkedLogs[i]" /></td>
+          <td style="max-width:70vw">
+            <div style="text-align:center;font-family:monospace">
+              <u>{{tsToDateTimeStr(log.timestamp)}}</u>
+            </div>
+            <div>{{log.msg}}</div>
+          </td>
+          <td style="text-align:center;padding:0;width:7ch">
+            <button @click="editLog(i)" style="margin:0" :class="{canceledit: editingLog==i}">
+              <span v-if="editingLog==i">Cancel</span>
+              <span v-else>Edit</span>
+            </button>
+          </td>
+          <td style="text-align:center;padding:0">
+            <input type="checkbox" v-model="checkedLogs[i]" />
+          </td>
         </tr>
       </table>
     </div>
@@ -184,22 +206,29 @@ th, td {
           offset: 0
         };
         return {
-          loggedIn: false,
           username: "",
           password: "",
+          loggedIn: false,
           authStr: "",
-          showingSortFilters: false,
+
+          newLog: {},
           logs: [],
           checkedLogs: [],
-          newLog: {},
+
+          editingLog: -1,
+
+          showingSortFilters: false,
           newSortFilters: Object.assign({}, sortFilters),
           sortFilters: sortFilters,
+
           _blank: null 
         };
       },
       methods: {
         async login(ev) {
-          ev.preventDefault();
+          if (ev !== undefined) {
+            ev.preventDefault();
+          }
           this.authStr = btoa(`${this.username}:${this.password}`);
           const resp = await fetch("/login", {
             "method": "POST",
@@ -210,6 +239,7 @@ th, td {
             return;
           }
           this.loggedIn = true;
+          await this.getLogs();
         },
         setTimestampNow() {
           const now = new Date();
@@ -220,16 +250,25 @@ th, td {
           this.showingSortFilters = false;
           this.newSortFilters = Object.assign({}, this.sortFilters);
         },
-        async submitNewLog(ev) {
+        async submitLog(ev) {
           ev.preventDefault();
           let timestamp = undefined;
           if (this.newLog.timestamp != "") {
             timestamp = Math.floor((new Date(this.newLog.timestamp)).getTime() / 1000);
           }
           const log = {"timestamp": timestamp, "msg": this.newLog.msg};
+          let url, method;
+          if (this.editingLog < 0) {
+            url = "/logs";
+            method = "POST";
+          } else {
+            url = `/logs?id=${this.newLog.id}`;
+            method = "PUT";
+          }
           this.newLog = {};
-          const resp = await fetch(`/logs`, {
-            "method": "POST",
+          this.editingLog = -1;
+          const resp = await fetch(url, {
+            "method": method,
             "headers": {"Authorization": `Basic ${this.authStr}`},
             "body": JSON.stringify(log)
           });
@@ -237,10 +276,13 @@ th, td {
             alert(await resp.text());
             return;
           }
-          alert("Success");
+          //alert("Success");
+          await this.getLogs();
         },
         async getLogs(ev) {
-          ev.preventDefault();
+          if (ev !== undefined) {
+            ev.preventDefault();
+          }
           this.showingSortFilters = false;
           this.sortFilters = Object.assign({}, this.newSortFilters);
 
@@ -273,7 +315,7 @@ th, td {
           if (json.error !== undefined) {
             alert(`Partial error:\n${json.error}`);
           } else {
-            alert("Success");
+            //alert("Success");
           }
         },
         async deleteChecked() {
@@ -285,6 +327,8 @@ th, td {
           }
           if (ids.length == 0) {
             return;
+          } else if (!confirm("Are you sure?")) {
+            return;
           }
           const resp = await fetch(`/logs?ids=${ids.join(",")}`, {
             "method": "DELETE",
@@ -293,8 +337,24 @@ th, td {
           if (!resp.ok) {
             alert(await resp.text());
           } else {
-            alert("Success");
+            //alert("Success");
+            await this.getLogs();
           }
+        },
+        editLog(i) {
+          if (this.editingLog == i) {
+            this.cancelEditing();
+            return;
+          }
+          this.editingLog = i;
+          this.newLog = Object.assign({}, this.logs[i]);
+          const dt = new Date(this.newLog.timestamp * 1000);
+          dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
+          this.newLog.timestamp = dt.toISOString().slice(0, 16);
+        },
+        cancelEditing() {
+          this.editingLog = -1;
+          this.newLog = {};
         },
         uncheckAll() {
           this.checkedLogs = Array(this.logs.length).fill(false);
