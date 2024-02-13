@@ -47,8 +47,14 @@ table {
 #filter-div > div {
   margin: 2px;
 }
+#reset-cancel-buttons-div {
+  width: 100%;
+}
 #reset-cancel-buttons-div > button {
   margin: 2px;
+}
+#reset-cancel-buttons-div > button:last-child {
+  float: right;
 }
 #check-buttons > button {
   margin: 0px 5px 2px 5px;
@@ -104,7 +110,7 @@ table {
       <hr style="width:90%" />
 
       <button @click="showingSortFilters = !showingSortFilters">
-        <span v-if="showingSortFilters">Hide</span><span v-else>Show</span> Short/Filters
+        <span v-if="showingSortFilters">Hide</span><span v-else>Show</span> Sort/Filters
       </button>
 
       <form
@@ -115,7 +121,7 @@ table {
             <label for="sort">Sort By:</label>
             <select name="sort" v-model="newSortFilters.sort">
               <option value="timestamp" selected>Time</option>
-              <option value="id">ID</option>
+              <option value="id">Added</option>
             </select>
           </div>
 
@@ -154,8 +160,9 @@ table {
         <hr style="width:90%" />
 
         <div id="reset-cancel-buttons-div">
-          <button onclick="resetSortFilters()">Reset</button>
+          <button onclick="cancelSortFilters()">Cancel</button>
           <button type="submit">Apply</button>
+          <button onclick="resetSortFilters()">Reset</button>
         </div>
       </form>
 
@@ -195,16 +202,18 @@ table {
     function dtlStrToTs(str) {
       return Math.floor((new Date(str)).getTime() / 1000);
     }
+    function defaultSortFilters() {
+      return {
+        sort: "timestamp",
+        desc: true,
+        start: "",
+        end: "",
+        limit: 50,
+        offset: 0
+      };
+    }
     const App = {
       data() {
-        const sortFilters = {
-          sort: "id",
-          desc: true,
-          start: "",
-          end: "",
-          limit: 50,
-          offset: 0
-        };
         return {
           username: "",
           password: "",
@@ -218,8 +227,8 @@ table {
           editingLog: -1,
 
           showingSortFilters: false,
-          newSortFilters: Object.assign({}, sortFilters),
-          sortFilters: sortFilters,
+          newSortFilters: defaultSortFilters(),
+          sortFilters: defaultSortFilters(),
 
           _blank: null 
         };
@@ -247,6 +256,10 @@ table {
           this.newLog.timestamp = now.toISOString().slice(0, 16);
         },
         resetSortFilters() {
+          //this.showingSortFilters = false;
+          this.newSortFilters = defaultSortFilters();
+        },
+        cancelSortFilters() {
           this.showingSortFilters = false;
           this.newSortFilters = Object.assign({}, this.sortFilters);
         },
