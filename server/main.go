@@ -42,6 +42,11 @@ func init() {
 }
 
 func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			logpkg.Fatalf("program panicked: %v", r)
+		}
+	}()
 	logpkg.SetFlags(0)
 	addr := flag.String("addr", "127.0.0.1:8000", "Address to run on")
 	logPath := flag.String("log-file", "", "Path to log file (empty means stderr)")
