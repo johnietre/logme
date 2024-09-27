@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	jmux "github.com/johnietre/go-jmux"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -64,33 +63,18 @@ func main() {
 		logpkg.SetOutput(f)
 	}
 
-	srvr := &http.Server{
-		Addr: *addr,
-	}
-
-	r := jmux.NewRouter()
-	r.Get("/", jmux.WrapF(homeHandler))
-	r.GetFunc("/manifest.json", func(c *jmux.Context) {
-		http.ServeFile(c.Writer, c.Request, manifestPath)
+	http.HandleFunc("/", homeHandler)
+	http.HandleFunc("/manifest.json", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, manifestPath)
 	})
-
-	/*
-	  r := http.NewServeMux()
-		r.HandleFunc("/", homeHandler)
-		r.HandleFunc("/manifest.json", func(w http.ResponseWriter, r *http.Request) {
-			http.ServeFile(w, r, manifestPath)
-		})
-		r.Handle(
-			"/icons/",
-			http.StripPrefix("/icons", http.FileServer(http.Dir(iconsPath))),
-		)
-		r.Handle("/login", authMiddleware(http.HandlerFunc(loginHandler)))
-		r.Handle("/logs", authMiddleware(http.HandlerFunc(logsHandler)))
-	*/
-
-	srvr.Handler = r
+	http.Handle(
+		"/icons/",
+		http.StripPrefix("/icons", http.FileServer(http.Dir(iconsPath))),
+	)
+	http.Handle("/login", authMiddleware(http.HandlerFunc(loginHandler)))
+	http.Handle("/logs", authMiddleware(http.HandlerFunc(logsHandler)))
 	logpkg.Printf("Running on %s", *addr)
-	logpkg.Fatalf("error running server: %v", srvr.ListenAndServe())
+	logpkg.Fatalf("error running server: %v", http.ListenAndServe(*addr, nil))
 }
 
 func authMiddleware(next http.Handler) http.Handler {
