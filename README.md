@@ -1,2 +1,5 @@
 # logme
-A BASIC service to log my day.
+A basic service to log my day.
+
+# TODO
+- [ ] Stuff
