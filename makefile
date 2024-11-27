@@ -14,5 +14,5 @@ logs:
 
 clean:
 	rm -i databases/users.db
-	rm -ir databases/users
+	rm -ir databases/users/*
 	rm -ir logs/*

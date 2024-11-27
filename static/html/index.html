@@ -1,3 +1,8 @@
+<!-- TODO
+  link detailed date (calendar/time) and datetime local
+  improve date typing inputs
+  add select time/date inputs
+-->
 <!DOCTYPE html>
 
 <html lang="en-US">
@@ -7,6 +12,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
   <script src="https://unpkg.com/vue@3"></script>
+  <script type="module" src="/static/js/main.js"></script>
+  <link rel="stylesheet" href="/static/css/dtinput.css" />
   <link rel="manifest" href="manifest.json" />
 <style>
 h1, h2, h3 {
@@ -21,22 +28,36 @@ th, td {
   overflow-wrap: break-word;
   word-wrap: break-word;
 }
-table {
-  /*
-  max-width: 90vw;
-  */
-}
 .flex-column {
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+/* Firefox */
+.no-number-arrows {
+  -moz-appearance: textfield;
+}
+/* Others */
+.no-number-arrows::-webkit-outer-spin-button,
+.no-number-arrows::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+#header {
+  width: 100%;
+  text-align: center;
+  border-bottom: 2px solid black;
+  margin-bottom: 15px;
+}
+#title {
+  margin: 5px 0;
 }
 #main {
 }
 #new-log-form {
   width: 100%;
 }
-#sort-filters-form {
+#sort-filtShowers-form {
   border: 1px solid black;
   margin: 2px;
 }
@@ -64,14 +85,109 @@ table {
 }
 #logout-button-div {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 15px;
+  right: 15px;
 }
 </style>
 </head>
 
 <body>
   <div id="app">
+
+    <!--
+    <div id="dtinput-popup" v-if="showingDateTimePopup" class="flex-column">
+      <div id="calendar-view" class="flex-column">
+        <div>
+        <div id="time-input">
+          <input type="number" step="1" min="0" max="23" v-model="dateTimeInput.hour">
+          <span>:</span>
+          <input type="number" step="1" min="0" max="59" v-model="dateTimeInput.minute">
+          <span>:</span>
+          <input type="number" step="1" min="0" max="59" v-model="dateTimeInput.second">
+        </div>
+        <div id="date-input">
+          <input
+            type="number"
+            step="1" min="1" :max="daysInMonth(dateTimeInput.toDate())"
+            placeholder="Day"
+            v-model="dateTimeInput.day">
+          <span>,&nbsp</span>
+          <select
+            id="month-input"
+            @change="adjustDateTimeInput()"
+            v-model="dateTimeInput.month">
+            <option value="0">Jan</option>
+            <option value="1">Feb</option>
+            <option value="2">Mar</option>
+            <option value="3">Apr</option>
+            <option value="4">May</option>
+            <option value="5">Jun</option>
+            <option value="6">Jul</option>
+            <option value="7">Aug</option>
+            <option value="8">Sep</option>
+            <option value="9">Oct</option>
+            <option value="10">Nov</option>
+            <option value="11">Dec</option>
+          </select>
+          <input
+            id="year-input" type="number"
+            step="1" min="1970" max="2200"
+            placeholder="year" @change="adjustDateTimeInput()"
+            v-model="dateTimeInput.year">
+        </div>
+        </div>
+        <div id="date-prev-next-div">
+          <button @click="decrYear()">&lt;&lt;</button>
+          <button @click="decrMonth()">&lt;</button>
+          <button style="margin: 0px 2px" @click="dateTimeInput.makeNow()">Now</button>
+          <button @click="incrMonth()">&gt;</button>
+          <button @click="incrYear()">&gt;&gt;</button>
+        </div>
+        <div>
+        </div>
+        <table id="calendar">
+          <tr>
+            <th><div>Sun</div></th>
+            <th><div>Mon</div></th>
+            <th><div>Tue</div></th>
+            <th><div>Wed</div></th>
+            <th><div>Thu</div></th>
+            <th><div>Fri</div></th>
+            <th><div>Sat</div></th>
+          </tr>
+          <tr v-for="(week, wi) in (dateTimeInput.days.length / 7)" :key="wi">
+            <td
+              v-for="(day, di) of dateTimeInput.days.slice((week - 1) * 7, week * 7)"
+              :key="di"
+              @click=""
+              >
+              <div v-if="!day.inMonth"></div>
+              <div
+                v-else
+                @click="dateTimeInput.day=day.date"
+                :style="{
+                'color': (day.inMonth) ? 'black' : 'gray',
+                'backgroundColor': (day.date == dateTimeInput.day) ? 'aqua' : 'transparent'
+                }"
+                >{{day.date}}</div>
+            </td>
+          </tr>
+        </table>
+      </div>
+      <div id="time-view">
+      </div>
+      <div>
+        <button @click="showHideDateTimePopup">Close</button>
+      </div>
+    </div>
+    -->
+
+    <header id="header">
+      <h1 id="title">LogMe</h1>
+      <div id="logout-button-div" v-if="loggedIn">
+        <button @click="logout">Logout</buton>
+      </div>
+    </header>
 
     <div id="login" v-if="!loggedIn">
       <form id="login-form" class="flex-column" @submit.prevent="login" v-if="!registering">
@@ -82,7 +198,7 @@ table {
             name="email"
             placeholder="Email"
             v-model="user.email"
-            required/>
+            required>
         </div>
         <div>
           <label for="password">Password:</label>
@@ -91,7 +207,7 @@ table {
             name="password"
             placeholder="password"
             v-model="password"
-            required/>
+            required>
         </div>
         <div>
           <button type="submit">Submit</button>
@@ -101,7 +217,7 @@ table {
       <form id="register-form" class="flex-column" @submit.prevent="register" v-else>
         <div>
           <label for="email">Email:</label>
-          <input type="email" name="email" placeholder="Email" v-model="user.email" required/>
+          <input type="email" name="email" placeholder="Email" v-model="user.email" required>
         </div>
         <div>
           <label for="password">Password:</label>
@@ -110,7 +226,7 @@ table {
             name="password"
             placeholder="Password"
             v-model="password"
-            required/>
+            required>
         </div>
         <div>
           <label for="password-conf">Password Confirmation:</label>
@@ -119,7 +235,7 @@ table {
             name="password-conf"
             placeholder="Password Confirmation"
             v-model="passwordConf"
-            required/>
+            required>
         </div>
         <div>
           <button type="submit">Submit</button>
@@ -128,10 +244,8 @@ table {
       </form>
     </div>
 
-    <div id="main" class="flex-column" v-else>
-      <div id="logout-button-div">
-        <button @click="logout">Logout</buton>
-      </div>
+    <main id="main" class="flex-column" v-else>
+      <h3>Year {{testModel.year}}</h3>
       <form id="new-log-form" class="flex-column" @submit="submitLog">
         <h3>
           <span v-if="editingLog<0">New</span>
@@ -142,12 +256,60 @@ table {
           <input
           type="text" name="msg"
           style="width:95vw" placeholder="Message" autocomplete="off"
-          v-model="newLog.msg" />
+          v-model="newLog.msg" >
         </div>
 
         <div>
-          <input type="datetime-local" name="timestamp" v-model="newLog.timestamp" />
+          <input type="datetime-local">
+          <br>
+          <DTInput v-model="testModel" />
+          <!--
+          <span class="dtinput" style="border:1px solid black;padding:2px;margin:2px;">
+            <input
+              type="number"
+              class="dtinput-field no-number-arrows"
+              placeholder="yyyy"
+              size=4 min="2000" max="2100"
+              >
+            /
+            <input
+              type="number"
+              class="dtinput-field no-number-arrows"
+              placeholder="mm"
+              size=2 min="1" max="12"
+              pattern="[0-9]{2}"
+              >
+            /
+            <input
+              type="number"
+              class="dtinput-field no-number-arrows"
+              placeholder="dd"
+              size=2 min="0" max="31"
+              pattern="[0-9]{2}"
+              >
+            ,&nbsp;
+            <input
+              type="text"
+              class="dtinput-field no-number-arrows"
+              placeholder="HH"
+              size=2 min="0" max="23"
+              pattern="[0-9]{2}"
+              >
+            :
+            <input
+              type="text"
+              class="dtinput-field no-number-arrows"
+              placeholder="MM"
+              size=2 min="0" max="60"
+              pattern="[0-9]{2}"
+              >
+          </span>
+          -->
+          <!--
+            <input type="datetime-local" name="timestamp" v-model="newLog.timestamp" >
+          -->
           <button type="button" style="margin-left:2px" @click="setTimestampNow">Now</button>
+          <button type="button" @click="showHideDateTimePopup">Detailed Date</button>
         </div>
 
         <div>
@@ -156,7 +318,7 @@ table {
         </div>
       </form>
 
-      <hr style="width:90%" />
+      <hr style="width:90%" >
 
       <button @click="showingSortFilters = !showingSortFilters">
         <span v-if="showingSortFilters">Hide</span><span v-else>Show</span> Sort/Filters
@@ -176,19 +338,19 @@ table {
 
           <div>
             <label for="desc">Desc:</label>
-            <input type="checkbox" name="desc" v-model="newSortFilters.desc" />
+            <input type="checkbox" name="desc" v-model="newSortFilters.desc" >
           </div>
         </div>
-        <hr style="width:90%" />
+        <hr style="width:90%" >
 
         <div id="filter-div">
           <div>
             <label for="start">Start:</label>
-            <input type="datetime-local" name="start" v-model="newSortFilters.start" />
+            <input type="datetime-local" name="start" v-model="newSortFilters.start" >
           </div>
           <div>
             <label for="end">End:</label>
-            <input type="datetime-local" name="end" v-model="newSortFilters.end" />
+            <input type="datetime-local" name="end" v-model="newSortFilters.end" >
           </div>
 
           <div>
@@ -196,17 +358,17 @@ table {
             <input
             type="number" name="limit"
             min="1" step="1" size="6"
-            v-model="newSortFilters.limit" />
+            v-model="newSortFilters.limit" >
           </div>
           <div>
             <label for="offset">Offset:</label>
             <input
             type="number" name="offset"
             min="0" step="1" size="8"
-            v-model="newSortFilters.offset" />
+            v-model="newSortFilters.offset" >
           </div>
         </div>
-        <hr style="width:90%" />
+        <hr style="width:90%" >
 
         <div id="reset-cancel-buttons-div">
           <button onclick="cancelSortFilters()">Cancel</button>
@@ -240,306 +402,14 @@ table {
             </button>
           </td>
           <td style="text-align:center;padding:0">
-            <input type="checkbox" v-model="checkedLogs[i]" />
+            <input type="checkbox" v-model="checkedLogs[i]" >
           </td>
         </tr>
       </table>
-    </div>
+    </main>
 
   </div>
 
-  <script>
-(function() {
-  // TODO: start/stop
-
-function dtlStrToTs(str) {
-  return Math.floor((new Date(str)).getTime() / 1000);
-}
-
-function defaultSortFilters() {
-  return {
-    sort: "timestamp",
-    desc: true,
-    start: "",
-    end: "",
-    limit: 50,
-    offset: 0
-  };
-}
-
-function newUser() {
-  return {
-    "id": 0,
-    "email": ""
-  };
-}
-
-const App = {
-  data() {
-    return {
-      user: newUser(),
-      password: "",
-      passwordConf: "",
-      loggedIn: false,
-      registering: false,
-      tokStr: "",
-
-      newLog: {},
-      logs: [],
-      checkedLogs: [],
-
-      editingLog: -1,
-
-      showingSortFilters: false,
-      newSortFilters: defaultSortFilters(),
-      sortFilters: defaultSortFilters(),
-
-      _blank: null 
-    };
-  },
-  async mounted() {
-    await this.getUser();
-    if (this.loggedIn) {
-      await this.getLogs();
-    }
-  },
-  methods: {
-    async login() {
-      const authStr = btoa(`${this.user.email}:${this.password}`);
-      const resp = await fetch(
-        "/token",
-        this.newFetchParams("POST", {"Authorization": `Basic ${authStr}`}),
-      );
-      if (!resp.ok) {
-        alert(`Error logging in: ${await resp.text()}`);
-        return;
-      }
-      if (!navigator.cookieEnabled) {
-        this.tokStr = await resp.text();
-      }
-      this.loggedIn = true, this.registering = false;
-      this.password = "";
-      await this.getLogs();
-    },
-    async logout() {
-      await fetch("/token", this.newFetchParams("DELETE"));
-      this.loggedIn = false;
-      const email = this.email;
-      this.user = newUser();
-      // TODO: delete?
-      this.user.email = email;
-    },
-    async register() {
-      if (this.password != this.passwordConf) {
-        alert("Passwords must match");
-        return;
-      }
-      const authStr = btoa(`${this.user.email}:${this.password}`);
-      const body = {"email": this.user.email};
-      const resp = await fetch(
-        "/user",
-        this.newFetchParams("POST", {"Authorization": `Basic ${authStr}`}, body),
-      );
-      if (!resp.ok) {
-        alert(`Error registering: ${await this.textOrDefault(resp)}`);
-        return;
-      }
-      if (!navigator.cookieEnabled) {
-        this.tokStr = await resp.text();
-      }
-      this.registering = false;
-      this.passwordConf = "";
-      await this.login();
-    },
-    async getUser() {
-      const resp = await fetch("/user", this.newFetchParams());
-      if (!resp.ok) {
-        if (resp.status == 401) {
-          if (this.loggedIn) {
-            alert(`Error getting user data: ${await resp.text()}`);
-            alert(`Logged out`);
-          }
-        } else {
-          await this.checkResp(resp, "Error getting user: ");
-        }
-        this.loggedIn = false;
-        return;
-      }
-      this.user = await resp.json();
-      this.loggedIn = true;
-    },
-    async getLogs() {
-      this.showingSortFilters = false;
-      this.sortFilters = Object.assign({}, this.newSortFilters);
-
-      const parts = [
-        `sort=${this.sortFilters.sort}`,
-        `desc=${this.sortFilters.desc}`,
-        `limit=${this.sortFilters.limit}`,
-        `offset=${this.sortFilters.offset}`
-      ];
-      if (this.sortFilters.start != "") {
-        parts.push(`start=${dtlStrToTs(this.sortFilters.start)}`);
-      }
-      if (this.sortFilters.end != "") {
-        parts.push(`end=${dtlStrToTs(this.sortFilters.end)}`);
-      }
-
-      const query = parts.join("&");
-      const resp = await fetch(`logs?${query}`, this.newFetchParams());
-      if (!(await this.checkResp(resp, "Error getting logs: "))) {
-        return;
-      }
-
-      const json = await resp.json();
-      this.logs = json.logs ?? [];
-      this.checkedLogs = Array(this.logs.length).fill(false);
-      if (json.error !== undefined) {
-        alert(`Partial error: ${json.error}`);
-      } else {
-        //alert("Success");
-      }
-    },
-    async submitLog(ev) {
-      ev.preventDefault();
-      let timestamp = undefined;
-      if (this.newLog.timestamp != "") {
-        timestamp = Math.floor((new Date(this.newLog.timestamp)).getTime() / 1000);
-      }
-      const log = {"timestamp": timestamp, "msg": this.newLog.msg};
-      let url, method;
-      if (this.editingLog < 0) {
-        url = "/logs";
-        method = "POST";
-      } else {
-        url = `/logs?id=${this.newLog.id}`;
-        method = "PUT";
-      }
-      this.newLog = {};
-      this.editingLog = -1;
-      const resp = await fetch(url, {
-        "method": method,
-        "headers": {"Authorization": `Basic ${this.authStr}`},
-        "body": JSON.stringify(log)
-      });
-      if (!resp.ok) {
-        alert(await resp.text());
-        return;
-      }
-      //alert("Success");
-      await this.getLogs();
-    },
-    async deleteChecked() {
-      const ids = [];
-      for (var i = 0; i < this.logs.length; i++) {
-        if (this.checkedLogs[i]) {
-          ids.push(this.logs[i].id);
-        }
-      }
-      if (ids.length == 0) {
-        return;
-      } else if (!confirm("Are you sure?")) {
-        return;
-      }
-      const resp = await fetch(`/logs?ids=${ids.join(",")}`, {
-        "method": "DELETE",
-        "headers": {"Authorization": `Basic ${this.authStr}`}
-      });
-      if (!resp.ok) {
-        alert(await resp.text());
-      } else {
-        //alert("Success");
-        await this.getLogs();
-      }
-    },
-    newFetchParams(method, headers, body) {
-      if (method === undefined) {
-        method = "GET";
-      }
-      if (headers === undefined) {
-        headers = {};
-      }
-      if (this.tokStr !== "") {
-        headers = {"Authorization": `Bearer ${this.tokStr}`, ...headers};
-      }
-      if (typeof body === "object") {
-        body = JSON.stringify(body);
-      }
-      return {
-        "method": method,
-        "headers": headers,
-        "body": body,
-      };
-    },
-    async checkResp(resp, msg) {
-      if (resp.ok) {
-        return true;
-      }
-      const text = await this.textOrDefault(resp);
-      if (msg) {
-        alert(msg + text);
-      } else {
-        alert(`Error: ${text}`);
-      }
-      if (resp.status == 401) {
-        if (this.loggedIn) {
-          alert(`Logged out`);
-        }
-        this.loggedIn = false;
-      }
-      return false;
-    },
-    async textOrDefault(resp) {
-      const text = await resp.text();
-      if (text !== "") {
-        return text;
-      }
-      return resp.statusText;
-    },
-    setTimestampNow() {
-      const now = new Date();
-      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-      this.newLog.timestamp = now.toISOString().slice(0, 16);
-    },
-    resetSortFilters() {
-      //this.showingSortFilters = false;
-      this.newSortFilters = defaultSortFilters();
-    },
-    cancelSortFilters() {
-      this.showingSortFilters = false;
-      this.newSortFilters = Object.assign({}, this.sortFilters);
-    },
-    editLog(i) {
-      if (this.editingLog == i) {
-        this.cancelEditing();
-        return;
-      }
-      this.editingLog = i;
-      this.newLog = Object.assign({}, this.logs[i]);
-      const dt = new Date(this.newLog.timestamp * 1000);
-      dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
-      this.newLog.timestamp = dt.toISOString().slice(0, 16);
-    },
-    cancelEditing() {
-      this.editingLog = -1;
-      this.newLog = {};
-    },
-    uncheckAll() {
-      this.checkedLogs = Array(this.logs.length).fill(false);
-    },
-    checkAll() {
-      this.checkedLogs = Array(this.logs.length).fill(true);
-    },
-    tsToDateTimeStr(timestamp) {
-      const date = new Date(timestamp * 1000);
-      return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
-    }
-  }
-};
-Vue.createApp(App).mount("#app");
-
-})()
-  </script>
 </body>
 
 </html>

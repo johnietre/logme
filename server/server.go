@@ -11,7 +11,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	logpkg "log"
@@ -27,21 +26,25 @@ import (
 	jmux "github.com/johnietre/go-jmux"
 	utils "github.com/johnietre/utils/go"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/spf13/cobra"
 	"golang.org/x/crypto/bcrypt"
 )
 
 const (
-	maxLogMsgLen    = 256
+	maxLogMsgLen = 256
+	maxLogs      = 1000
+
 	tokenDur        = time.Hour * 24 * 365
 	cookieDur       = tokenDur
 	tokenCookieName = "logme-token"
 )
 
 var (
-	usersDb                            *sql.DB
-	databasesDir                       string
-	jwtKey                             []byte
-	indexPath, manifestPath, iconsPath string
+	usersDb                 *sql.DB
+	databasesDir            string
+	jwtKey                  []byte
+	indexPath, staticPath   string
+	manifestPath, iconsPath string
 )
 
 func init() {
@@ -51,18 +54,39 @@ func init() {
 
 	databasesDir = filepath.Join(parentDir, "databases")
 	indexPath = filepath.Join(parentDir, "static", "html", "index.html")
+	staticPath = filepath.Join(parentDir, "static")
 	manifestPath = filepath.Join(parentDir, "assets", "manifest.json")
 	iconsPath = filepath.Join(parentDir, "assets", "icons/ios")
 }
 
-func Run() {
-	logpkg.SetFlags(0)
-	addr := flag.String("addr", "127.0.0.1:8000", "Address to run on")
-	logPath := flag.String("log-file", "", "Path to log file (empty means stderr)")
-	flag.Parse()
+func MakeCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:                   "logme",
+		Run:                   run,
+		DisableFlagsInUseLine: true,
+	}
+	flags := cmd.Flags()
+	flags.String("addr", "127.0.0.1:8000", "Address to run on")
+	flags.String("log-file", "", "Path to log file (empty means stderr)")
+	return cmd
+}
 
-	if *logPath != "" {
-		f, err := utils.OpenAppend(*logPath)
+func Run() {
+	if err := MakeCmd().Execute(); err != nil {
+		logpkg.Fatal(err)
+	}
+}
+
+func run(cmd *cobra.Command, _ []string) {
+	logpkg.SetFlags(0)
+
+	flags := cmd.Flags()
+
+	addr, _ := flags.GetString("addr")
+	logPath, _ := flags.GetString("log-file")
+
+	if logPath != "" {
+		f, err := utils.OpenAppend(logPath)
 		if err != nil {
 			logpkg.Fatalf("error opening log file: %v", err)
 		}
@@ -87,11 +111,14 @@ func Run() {
 	}
 
 	srvr := &http.Server{
-		Addr: *addr,
+		Addr: addr,
 	}
 
 	r := jmux.NewRouter()
 	r.Get("/", jmux.WrapF(homeHandler))
+	staticFS := http.FileServer(http.Dir(staticPath))
+	r.Get("/static/", jmux.WrapH(http.StripPrefix("/static", staticFS))).
+		MatchAny(jmux.MethodsGet())
 	r.GetFunc("/manifest.json", func(c *jmux.Context) {
 		http.ServeFile(c.Writer, c.Request, manifestPath)
 	})
@@ -113,7 +140,7 @@ func Run() {
 	r.Delete("/logs", authMiddleware(jmux.HandlerFunc(deleteLogHandler)))
 
 	srvr.Handler = r
-	logpkg.Printf("running on %s", *addr)
+	logpkg.Printf("running on %s", srvr.Addr)
 	logpkg.Fatalf("error running server: %v", srvr.ListenAndServe())
 }
 
@@ -763,8 +790,8 @@ func (user *User) hashPassword() error {
 
 func (user *User) create() error {
 	res, err := usersDb.Exec(
-		`INSERT INTO users(email,password_hash,deleted) VALUES (?,?,?)`,
-		user.Email, user.passwordHash, false,
+		`INSERT INTO users(email,password_hash,deleted,max_logs) VALUES (?,?,?,?)`,
+		user.Email, user.passwordHash, false, maxLogs,
 	)
 	if err != nil {
 		return err
