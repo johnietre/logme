@@ -4,18 +4,20 @@
 // TODO: rate limiting?
 // TODO: max DB connections open
 // TODO: frequents
-// TODO: cookie params by config (name, domain, path, etc.)
 package server
 
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	logpkg "log"
 	"net/http"
+	"net/mail"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -34,17 +36,18 @@ const (
 	maxLogMsgLen = 256
 	maxLogs      = 1000
 
-	tokenDur        = time.Hour * 24 * 365
-	cookieDur       = tokenDur
-	tokenCookieName = "logme-token"
+	tokenDur = time.Hour * 24 * 365
 )
 
 var (
-	usersDb                 *sql.DB
-	databasesDir            string
-	jwtKey                  []byte
-	indexPath, staticPath   string
-	manifestPath, iconsPath string
+	usersDb                        *sql.DB
+	databasesDir                   string
+	jwtKey                         []byte
+	indexPath, staticPath, pkgPath string
+	manifestPath, iconsPath        string
+	disableNewUsers                bool
+
+	cookieConfig CookieConfig
 )
 
 func init() {
@@ -53,8 +56,10 @@ func init() {
 	parentDir := filepath.Dir(thisDir)
 
 	databasesDir = filepath.Join(parentDir, "databases")
-	indexPath = filepath.Join(parentDir, "static", "html", "index.html")
+	//indexPath = filepath.Join(parentDir, "static", "html", "index.html")
+	indexPath = filepath.Join(parentDir, "client", "index.html")
 	staticPath = filepath.Join(parentDir, "static")
+	pkgPath = filepath.Join(parentDir, "client", "pkg")
 	manifestPath = filepath.Join(parentDir, "assets", "manifest.json")
 	iconsPath = filepath.Join(parentDir, "assets", "icons/ios")
 }
@@ -65,9 +70,75 @@ func MakeCmd() *cobra.Command {
 		Run:                   run,
 		DisableFlagsInUseLine: true,
 	}
+
+	cmd.AddCommand(makeMigrateCmd(), makeConfigCmd())
+
 	flags := cmd.Flags()
 	flags.String("addr", "127.0.0.1:8000", "Address to run on")
 	flags.String("log-file", "", "Path to log file (empty means stderr)")
+	flags.BoolVar(
+		&disableNewUsers,
+		"disable-new-users",
+		false,
+		"Disable new user creation",
+	)
+	flags.String(
+		"cookie-config",
+		"",
+		"Path to cookie config (empty means use default)",
+	)
+	return cmd
+}
+
+// Used to migrate from the first iteration of logme database
+// Fields of id:INTEGER, timestamp:INTEGER, msg:TEXT
+func makeMigrateCmd() *cobra.Command {
+	// TODO
+	cmd := &cobra.Command{
+		Use: "migrate",
+		//Run:                   run,
+		Run: func(_ *cobra.Command, _ []string) {
+			logpkg.SetFlags(0)
+			logpkg.Print("migrate not implemented")
+			os.Exit(2)
+		},
+		DisableFlagsInUseLine: true,
+	}
+	/*
+		flags := cmd.Flags()
+		flags.String("addr", "127.0.0.1:8000", "Address to run on")
+		flags.String("log-file", "", "Path to log file (empty means stderr)")
+	*/
+	return cmd
+}
+
+func makeConfigCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use: "config",
+		//Run:                   run,
+		Run: func(cmd *cobra.Command, _ []string) {
+			logpkg.SetFlags(0)
+
+			flags := cmd.Flags()
+
+			cookiePath, _ := flags.GetString("generate-cookie")
+			if cookiePath != "" {
+				if err := newCookieConfig().WriteOut(cookiePath); err != nil {
+					logpkg.Fatalf(
+						"error writing cookie config file to %s: %v",
+						cookiePath, err,
+					)
+				}
+			}
+		},
+		DisableFlagsInUseLine: true,
+	}
+	flags := cmd.Flags()
+	flags.String(
+		"generate-cookie",
+		"",
+		"Generate new cookie configuration file and exit",
+	)
 	return cmd
 }
 
@@ -84,6 +155,8 @@ func run(cmd *cobra.Command, _ []string) {
 
 	addr, _ := flags.GetString("addr")
 	logPath, _ := flags.GetString("log-file")
+
+	cookieConfigPath, _ := flags.GetString("cookie-config")
 
 	if logPath != "" {
 		f, err := utils.OpenAppend(logPath)
@@ -105,6 +178,16 @@ func run(cmd *cobra.Command, _ []string) {
 		logpkg.Fatal("jwt key not set, set using LOGME_JWT_KEY or a file with its path stored in LOGME_JWT_KEY_FILE")
 	}
 
+	if cookieConfigPath != "" {
+		cc, err := loadCookieConfig(cookieConfigPath)
+		if err != nil {
+			logpkg.Fatalf(
+				"error reading cookie config from %s: %v",
+				cookieConfigPath, err,
+			)
+		}
+	}
+
 	usersDb, err = openUsersDb()
 	if err != nil {
 		logpkg.Fatal("error opening users database: ", err)
@@ -116,9 +199,26 @@ func run(cmd *cobra.Command, _ []string) {
 
 	r := jmux.NewRouter()
 	r.Get("/", jmux.WrapF(homeHandler))
+
 	staticFS := http.FileServer(http.Dir(staticPath))
 	r.Get("/static/", jmux.WrapH(http.StripPrefix("/static", staticFS))).
 		MatchAny(jmux.MethodsGet())
+	r.Get(
+		"/pkg/",
+		jmux.WrapH(http.StripPrefix(
+			"/pkg",
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch path.Ext(r.URL.Path) {
+				case ".js", ".wasm":
+					http.ServeFile(w, r, filepath.Join(pkgPath, r.URL.Path))
+				default:
+					http.NotFound(w, r)
+				}
+			}),
+		)),
+	).
+		MatchAny(jmux.MethodsGet())
+
 	r.GetFunc("/manifest.json", func(c *jmux.Context) {
 		http.ServeFile(c.Writer, c.Request, manifestPath)
 	})
@@ -129,6 +229,7 @@ func run(cmd *cobra.Command, _ []string) {
 			http.FileServer(http.Dir(iconsPath)),
 		)),
 	)
+
 	r.PostFunc("/user", newUserHandler)
 	r.PostFunc("/token", newTokenHandler)
 
@@ -148,23 +249,27 @@ func authMiddleware(next jmux.Handler) jmux.Handler {
 	return jmux.HandlerFunc(func(c *jmux.Context) {
 		tokStr, ok := getTokenStr(c)
 		if !ok {
-			c.WriteError(http.StatusUnauthorized, "missing or invalid auth")
+			c.WriteHeader(http.StatusUnauthorized)
+			c.WriteJSON(newErrResp("missing or invalid auth"))
 			return
 		}
 		tok, err := parseToken(tokStr)
 		if err != nil {
 			// TODO: error to return
 			c.WriteHeader(http.StatusUnauthorized)
+			c.WriteJSON(newErrResp("unauthorized"))
 			return
 		} else if !tok.Valid {
 			logpkg.Print("invalid token")
 			// TODO?
 			c.WriteHeader(http.StatusUnauthorized)
+			c.WriteJSON(newErrResp("invalid token"))
 			return
 		}
 		user, err := userFromToken(tok)
 		if err != nil {
 			c.WriteHeader(http.StatusInternalServerError)
+			c.WriteJSON(newErrResp("internal server error"))
 			logpkg.Print(err)
 			return
 		}
@@ -182,16 +287,19 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 func newTokenHandler(c *jmux.Context) {
 	email, password, ok := c.Request.BasicAuth()
 	if !ok {
-		c.WriteError(http.StatusBadRequest, "missing authorization")
+		c.WriteHeader(http.StatusBadRequest)
+		c.WriteJSON(newErrResp("missing authorization"))
 		return
 	}
 	user, err := getUserByEmail(email)
 	if err != nil {
 		if errors.Is(err, errUserNotExist) {
-			c.WriteError(http.StatusUnauthorized, "bad credentials")
+			c.WriteHeader(http.StatusUnauthorized)
+			c.WriteJSON(newErrResp("bad credentials"))
 		} else {
 			logpkg.Printf("error getting user for %s: %v", email, err)
 			c.WriteHeader(http.StatusInternalServerError)
+			c.WriteJSON(newErrResp("internal server error"))
 		}
 		return
 	}
@@ -201,44 +309,38 @@ func newTokenHandler(c *jmux.Context) {
 	)
 	// TODO: is this correct (no server errors possible)?
 	if err != nil {
-		c.WriteError(http.StatusUnauthorized, "bad credentials")
+		c.WriteHeader(http.StatusUnauthorized)
+		c.WriteJSON(newErrResp("bad credentials"))
 		return
 	}
 	tok, err := generateToken(user.Id)
 	if err != nil {
 		logpkg.Printf("error generating token for user %d: %v", user.Id, err)
 		c.WriteHeader(http.StatusInternalServerError)
+		c.WriteJSON(newErrResp("internal server error"))
 		return
 	}
-	http.SetCookie(c.Writer, newCookie(tok))
-	c.WriteString(tok)
+	http.SetCookie(c.Writer, cookieConfig.Token.newCookie(tok))
+	c.WriteJSON(newResp(tok))
 }
 
 func deleteTokenHandler(c *jmux.Context) {
-	cookie := newCookie("")
+	cookie := cookieConfig.Token.newCookie("")
 	cookie.Expires, cookie.MaxAge = time.Time{}, -1
 	http.SetCookie(c.Writer, cookie)
 }
 
-func newCookie(value string) *http.Cookie {
-	return &http.Cookie{
-		Name:  tokenCookieName,
-		Value: value,
-		// TODO: set
-		Path:   "",
-		Domain: "",
-		// TODO: one or the other?
-		Expires:  time.Now().Add(cookieDur),
-		MaxAge:   int(cookieDur.Seconds()),
-		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
-	}
-}
-
 func newUserHandler(c *jmux.Context) {
+	if disableNewUsers {
+		c.WriteHeader(http.StatusUnauthorized)
+		c.WriteJSON(newErrResp("new user creation disabled"))
+		return
+	}
+
 	_, password, ok := c.Request.BasicAuth()
 	if !ok {
-		c.WriteError(http.StatusBadRequest, "missing password")
+		c.WriteHeader(http.StatusBadRequest)
+		c.WriteJSON(newErrResp("missing password"))
 		return
 	}
 	var user User
@@ -247,26 +349,37 @@ func newUserHandler(c *jmux.Context) {
 			errors.Is(err, io.EOF) ||
 			errors.Is(err, io.ErrUnexpectedEOF)
 		if clientErr {
-			c.WriteError(http.StatusBadRequest, fmt.Sprint("bad json: ", err))
+			c.WriteHeader(http.StatusBadRequest)
+			c.WriteJSON(newErrResp(fmt.Sprint("bad json: ", err)))
 		} else {
 			logpkg.Print("error reading user json: ", err)
 			c.WriteHeader(http.StatusInternalServerError)
+			c.WriteJSON(newErrResp("internal server error"))
 		}
 		return
 	}
 	user.passwordHash = password
+	if !user.isValid() {
+		c.WriteHeader(http.StatusBadRequest)
+		c.WriteJSON(newErrResp(errInvalidUser.Error()))
+		return
+	}
 	if err := user.hashPassword(); err != nil {
-		c.WriteError(http.StatusBadRequest, "invalid password")
+		c.WriteHeader(http.StatusBadRequest)
+		c.WriteJSON(newErrResp("invalid password"))
 	}
 	if err := user.create(); err != nil {
 		if errors.Is(err, errUserExists) {
-			c.WriteError(http.StatusBadRequest, "user with email already exists")
+			c.WriteHeader(http.StatusBadRequest)
+			c.WriteJSON(newErrResp("user with email already exists"))
 		} else {
 			logpkg.Printf("error creating user: %v", err)
 			c.WriteHeader(http.StatusInternalServerError)
+			c.WriteJSON(newErrResp("internal server error"))
 		}
 		return
 	}
+	c.WriteJSON(newResp(user))
 }
 
 func getUserHandler(c *jmux.Context) {
@@ -274,6 +387,7 @@ func getUserHandler(c *jmux.Context) {
 	if !ok {
 		logpkg.Print("no user in context")
 		c.WriteHeader(http.StatusInternalServerError)
+		c.WriteJSON(newErrResp("internal server error"))
 		return
 	}
 	id := user.Id
@@ -281,22 +395,20 @@ func getUserHandler(c *jmux.Context) {
 	if err != nil {
 		logpkg.Printf("error getting user for ID %d: %v", id, err)
 		c.WriteHeader(http.StatusInternalServerError)
+		c.WriteJSON(newErrResp("internal server error"))
 		return
 	}
 	if user.Deleted {
 		// TODO: not found? no message?
-		c.WriteError(http.StatusUnauthorized, "user deleted")
+		c.WriteHeader(http.StatusUnauthorized)
+		c.WriteJSON(newErrResp("user deleted"))
 		return
 	}
-	if err := c.WriteMarshaledJSON(user); err != nil {
+	if err := c.WriteMarshaledJSON(newResp(user)); err != nil {
 		logpkg.Print("error mashaling user JSON: ", err)
 		c.WriteHeader(http.StatusInternalServerError)
+		c.WriteJSON(newErrResp("internal server error"))
 	}
-}
-
-type GetLogsResp struct {
-	Logs  []Log  `json:"logs"`
-	Error string `json:"error,omitempty"`
 }
 
 func getLogsHandler(c *jmux.Context) {
@@ -304,6 +416,7 @@ func getLogsHandler(c *jmux.Context) {
 	if !ok {
 		logpkg.Print("no user in context")
 		c.WriteHeader(http.StatusInternalServerError)
+		c.WriteJSON(newErrResp("internal server error"))
 		return
 	}
 	w, r := c.Writer, c.Request
@@ -373,7 +486,7 @@ func getLogsHandler(c *jmux.Context) {
 				Offset:   offset,
 			},
 		)
-		resp := GetLogsResp{Logs: logs}
+		resp := newResp(logs)
 		if err != nil {
 			logpkg.Printf("error getting logs for user %d: %v", user.Id, err)
 			//resp.Error = err.Error()
@@ -388,6 +501,7 @@ func newLogHandler(c *jmux.Context) {
 	if !ok {
 		logpkg.Print("no user in context")
 		c.WriteHeader(http.StatusInternalServerError)
+		c.WriteJSON(newErrResp("internal server error"))
 		return
 	}
 
@@ -397,19 +511,24 @@ func newLogHandler(c *jmux.Context) {
 			errors.Is(err, io.EOF) ||
 			errors.Is(err, io.ErrUnexpectedEOF)
 		if clientErr {
-			c.WriteError(http.StatusBadRequest, fmt.Sprint("bad json: ", err))
+			c.WriteHeader(http.StatusBadRequest)
+			c.WriteJSON(newErrResp(fmt.Sprint("bad json: ", err)))
 		} else {
 			logpkg.Print("error reading log json: ", err)
 			c.WriteHeader(http.StatusInternalServerError)
+			c.WriteJSON(newErrResp("internal server error"))
 		}
 		return
 	}
 	if len(log.Msg) > maxLogMsgLen {
-		c.WriteError(http.StatusBadRequest, "exceeds max log Amessage length")
+		c.WriteHeader(http.StatusBadRequest)
+		c.WriteJSON(newErrResp("exceeds max log Amessage length"))
 		return
 	}
 	if err := log.populateTags(); err != nil {
-		c.WriteError(http.StatusBadRequest, err.Error())
+		c.WriteHeader(http.StatusBadRequest)
+		c.WriteJSON(newErrResp(err.Error()))
+		return
 	}
 	if log.Timestamp <= 0 {
 		log.Timestamp = time.Now().Unix()
@@ -422,11 +541,13 @@ func newLogHandler(c *jmux.Context) {
 		if err := log.insertIntoDb(db); err != nil {
 			logpkg.Print("error inserting log: ", err)
 			c.WriteHeader(http.StatusInternalServerError)
+			c.WriteJSON(newErrResp("internal server error"))
 			return
 		}
-		if err := c.WriteMarshaledJSON(log); err != nil {
+		if err := c.WriteMarshaledJSON(newResp(log)); err != nil {
 			logpkg.Printf("error writing new json result: %v", err)
 			c.WriteHeader(http.StatusInternalServerError)
+			c.WriteJSON(newErrResp("internal server error"))
 		}
 	})
 }
@@ -436,6 +557,7 @@ func editLogHandler(c *jmux.Context) {
 	if !ok {
 		logpkg.Print("no user in context")
 		c.WriteHeader(http.StatusInternalServerError)
+		c.WriteJSON(newErrResp("internal server error"))
 		return
 	}
 	r := c.Request
@@ -445,7 +567,8 @@ func editLogHandler(c *jmux.Context) {
 	if idStr != "" {
 		var err error
 		if id, err = strconv.ParseInt(idStr, 10, 64); err != nil {
-			c.WriteError(http.StatusBadRequest, "bad id: "+idStr)
+			c.WriteHeader(http.StatusBadRequest)
+			c.WriteJSON(newErrResp("bad id: " + idStr))
 			return
 		}
 	}
@@ -456,10 +579,12 @@ func editLogHandler(c *jmux.Context) {
 			errors.Is(err, io.EOF) ||
 			errors.Is(err, io.ErrUnexpectedEOF)
 		if clientErr {
-			c.WriteError(http.StatusBadRequest, fmt.Sprint("bad json: ", err))
+			c.WriteHeader(http.StatusBadRequest)
+			c.WriteJSON(newErrResp(fmt.Sprint("bad json: ", err)))
 		} else {
 			logpkg.Print("error reading log diff json: ", err)
 			c.WriteHeader(http.StatusInternalServerError)
+			c.WriteJSON(newErrResp("internal server error"))
 		}
 		return
 	}
@@ -467,14 +592,19 @@ func editLogHandler(c *jmux.Context) {
 		ld.Id = id
 	}
 	if err := ld.populateTags(); err != nil {
-		c.WriteError(http.StatusBadRequest, err.Error())
+		c.WriteHeader(http.StatusBadRequest)
+		c.WriteJSON(newErrResp(err.Error()))
 	}
 
 	withUserDb(user.Id, func(db *sql.DB, err error) {
 		if err := ld.updateInDb(db); err != nil {
 			logpkg.Printf("error updating log for user %d: %v", user.Id, err)
 			c.WriteHeader(http.StatusInternalServerError)
+			c.WriteJSON(newErrResp("internal server error"))
+			return
 		}
+		//c.WriteJSON(newResp(log))
+		c.WriteJSON(newResp(nil))
 	})
 }
 
@@ -483,6 +613,7 @@ func deleteLogHandler(c *jmux.Context) {
 	if !ok {
 		logpkg.Print("no user in context")
 		c.WriteHeader(http.StatusInternalServerError)
+		c.WriteJSON(newErrResp("internal server error"))
 		return
 	}
 	r := c.Request
@@ -492,7 +623,8 @@ func deleteLogHandler(c *jmux.Context) {
 		for _, idStr := range strings.Split(idsStr, ",") {
 			id, err := strconv.ParseInt(idStr, 10, 64)
 			if err != nil {
-				c.WriteError(http.StatusBadRequest, fmt.Sprint("invalid id: ", idStr))
+				c.WriteHeader(http.StatusBadRequest)
+				c.WriteJSON(newErrResp(fmt.Sprint("invalid id: ", idStr)))
 				return
 			}
 			ids = append(ids, id)
@@ -501,7 +633,8 @@ func deleteLogHandler(c *jmux.Context) {
 	for _, idStr := range r.URL.Query()["id"] {
 		id, err := strconv.ParseInt(idStr, 10, 64)
 		if err != nil {
-			c.WriteError(http.StatusBadRequest, fmt.Sprint("invalid id: ", idStr))
+			c.WriteHeader(http.StatusBadRequest)
+			c.WriteJSON(newErrResp(fmt.Sprint("invalid id: ", idStr)))
 			return
 		}
 		ids = append(ids, id)
@@ -514,7 +647,9 @@ func deleteLogHandler(c *jmux.Context) {
 		if err := deleteLogsByIds(db, ids...); err != nil {
 			logpkg.Printf("error deleting logs for user %d: %v", user.Id, err)
 			c.WriteHeader(http.StatusInternalServerError)
+			c.WriteJSON(newErrResp("internal server error"))
 		}
+		c.WriteJSON(newResp(nil))
 	})
 }
 
@@ -736,13 +871,14 @@ type User struct {
 	Id           int64  `json:"id,omitempty"`
 	Email        string `json:"email,omitempty"`
 	passwordHash string
-	Deleted      bool `json:"deleted,omitempty"`
-	MaxLogs      int  `json:"maxLogs,omitempty"`
+	Deleted      bool   `json:"deleted,omitempty"`
+	MaxLogs      uint32 `json:"maxLogs,omitempty"`
 }
 
 var (
 	errUserNotExist = fmt.Errorf("user not found")
 	errUserExists   = fmt.Errorf("user exists")
+	errInvalidUser  = fmt.Errorf("invalid credentials")
 )
 
 func getUserById(userId int64) (user User, err error) {
@@ -775,6 +911,11 @@ func userFromContext(ctx context.Context) (user User, ok bool) {
 		user, ok = iUser.(User)
 	}
 	return
+}
+
+func (user User) isValid() bool {
+	return utils.Second(mail.ParseAddress(user.Email)) == nil &&
+		len(user.passwordHash) != 0
 }
 
 func (user *User) hashPassword() error {
@@ -963,5 +1104,85 @@ func withUserDb(userId int64, f func(db *sql.DB, err error)) {
 	f(db, err)
 	if db != nil {
 		db.Close()
+	}
+}
+
+type Response struct {
+	Content any    `json:"content,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+func newResp(content any) Response {
+	return Response{
+		Content: content,
+	}
+}
+
+func newErrResp(errMsg string) Response {
+	return Response{
+		Error: errMsg,
+	}
+}
+
+type CookieConfig struct {
+	Token TokenCookieConfig `json:"token,omitempty"`
+}
+
+func newCookieConfig() CookieConfig {
+	return CookieConfig{
+		Token: newTokenCookieConfig(),
+	}
+}
+
+func loadCookieConfig(path string) (CookieConfig, error) {
+	cc := newCookieConfig()
+	f, err := os.Open(path)
+	if err != nil {
+		return cc, err
+	}
+	defer f.Close()
+	err = json.NewDecoder(f).Decode(&cc)
+	return cc, err
+}
+
+func (cc CookieConfig) WriteOut(path string) error {
+	bytes, err := json.Marshal(cc)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, bytes, 0755)
+}
+
+type TokenCookieConfig struct {
+	Name   string `json:"name,omitempty"`
+	Path   string `json:"path,omitempty"`
+	Domain string `json:"domain,omitempty"`
+	MaxAge int    `json:"maxAge,omitempty"`
+	Secure bool   `json:"secure,omitempty"`
+}
+
+func newTokenCookieConfig() TokenCookieConfig {
+	return TokenCookieConfig{
+		Name:   "logme-token",
+		Path:   "",
+		Domain: "",
+		MaxAge: int(tokenDur.Seconds()),
+		Secure: false,
+	}
+}
+
+func (tcc TokenCookieConfig) newCookie(value string) *http.Cookie {
+	cookieDur := time.Duration(tcc.MaxAge) * time.Second
+	return &http.Cookie{
+		Name:   tcc.Name,
+		Value:  value,
+		Path:   tcc.Path,
+		Domain: tcc.Domain,
+		// TODO: one or the other?
+		Expires:  time.Now().Add(cookieDur),
+		MaxAge:   int(cookieDur.Seconds()),
+		Secure:   tcc.Secure,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
 	}
 }

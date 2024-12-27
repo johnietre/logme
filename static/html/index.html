@@ -1,8 +1,3 @@
-<!-- TODO
-  link detailed date (calendar/time) and datetime local
-  improve date typing inputs
-  add select time/date inputs
--->
 <!DOCTYPE html>
 
 <html lang="en-US">
@@ -94,98 +89,10 @@ th, td {
 <body>
   <div id="app">
 
-    <!--
-    <div id="dtinput-popup" v-if="showingDateTimePopup" class="flex-column">
-      <div id="calendar-view" class="flex-column">
-        <div>
-        <div id="time-input">
-          <input type="number" step="1" min="0" max="23" v-model="dateTimeInput.hour">
-          <span>:</span>
-          <input type="number" step="1" min="0" max="59" v-model="dateTimeInput.minute">
-          <span>:</span>
-          <input type="number" step="1" min="0" max="59" v-model="dateTimeInput.second">
-        </div>
-        <div id="date-input">
-          <input
-            type="number"
-            step="1" min="1" :max="daysInMonth(dateTimeInput.toDate())"
-            placeholder="Day"
-            v-model="dateTimeInput.day">
-          <span>,&nbsp</span>
-          <select
-            id="month-input"
-            @change="adjustDateTimeInput()"
-            v-model="dateTimeInput.month">
-            <option value="0">Jan</option>
-            <option value="1">Feb</option>
-            <option value="2">Mar</option>
-            <option value="3">Apr</option>
-            <option value="4">May</option>
-            <option value="5">Jun</option>
-            <option value="6">Jul</option>
-            <option value="7">Aug</option>
-            <option value="8">Sep</option>
-            <option value="9">Oct</option>
-            <option value="10">Nov</option>
-            <option value="11">Dec</option>
-          </select>
-          <input
-            id="year-input" type="number"
-            step="1" min="1970" max="2200"
-            placeholder="year" @change="adjustDateTimeInput()"
-            v-model="dateTimeInput.year">
-        </div>
-        </div>
-        <div id="date-prev-next-div">
-          <button @click="decrYear()">&lt;&lt;</button>
-          <button @click="decrMonth()">&lt;</button>
-          <button style="margin: 0px 2px" @click="dateTimeInput.makeNow()">Now</button>
-          <button @click="incrMonth()">&gt;</button>
-          <button @click="incrYear()">&gt;&gt;</button>
-        </div>
-        <div>
-        </div>
-        <table id="calendar">
-          <tr>
-            <th><div>Sun</div></th>
-            <th><div>Mon</div></th>
-            <th><div>Tue</div></th>
-            <th><div>Wed</div></th>
-            <th><div>Thu</div></th>
-            <th><div>Fri</div></th>
-            <th><div>Sat</div></th>
-          </tr>
-          <tr v-for="(week, wi) in (dateTimeInput.days.length / 7)" :key="wi">
-            <td
-              v-for="(day, di) of dateTimeInput.days.slice((week - 1) * 7, week * 7)"
-              :key="di"
-              @click=""
-              >
-              <div v-if="!day.inMonth"></div>
-              <div
-                v-else
-                @click="dateTimeInput.day=day.date"
-                :style="{
-                'color': (day.inMonth) ? 'black' : 'gray',
-                'backgroundColor': (day.date == dateTimeInput.day) ? 'aqua' : 'transparent'
-                }"
-                >{{day.date}}</div>
-            </td>
-          </tr>
-        </table>
-      </div>
-      <div id="time-view">
-      </div>
-      <div>
-        <button @click="showHideDateTimePopup">Close</button>
-      </div>
-    </div>
-    -->
-
     <header id="header">
       <h1 id="title">LogMe</h1>
       <div id="logout-button-div" v-if="loggedIn">
-        <button @click="logout">Logout</buton>
+        <button @click="logout">Logout</button>
       </div>
     </header>
 
@@ -260,59 +167,11 @@ th, td {
         </div>
 
         <div>
-          <input type="datetime-local">
-          <br>
-          <DTInput v-model="testModel" />
-          <!--
-          <span class="dtinput" style="border:1px solid black;padding:2px;margin:2px;">
-            <input
-              type="number"
-              class="dtinput-field no-number-arrows"
-              placeholder="yyyy"
-              size=4 min="2000" max="2100"
-              >
-            /
-            <input
-              type="number"
-              class="dtinput-field no-number-arrows"
-              placeholder="mm"
-              size=2 min="1" max="12"
-              pattern="[0-9]{2}"
-              >
-            /
-            <input
-              type="number"
-              class="dtinput-field no-number-arrows"
-              placeholder="dd"
-              size=2 min="0" max="31"
-              pattern="[0-9]{2}"
-              >
-            ,&nbsp;
-            <input
-              type="text"
-              class="dtinput-field no-number-arrows"
-              placeholder="HH"
-              size=2 min="0" max="23"
-              pattern="[0-9]{2}"
-              >
-            :
-            <input
-              type="text"
-              class="dtinput-field no-number-arrows"
-              placeholder="MM"
-              size=2 min="0" max="60"
-              pattern="[0-9]{2}"
-              >
-          </span>
-          -->
-          <!--
-            <input type="datetime-local" name="timestamp" v-model="newLog.timestamp" >
-          -->
-          <button type="button" style="margin-left:2px" @click="setTimestampNow">Now</button>
-          <button type="button" @click="showHideDateTimePopup">Detailed Date</button>
+          <DTInput v-model="newLog" hasnow="true" valname="timestamp"></DTInput>
         </div>
 
         <div>
+          <button type="button" @click="console.log(newLog)">Click</button>
           <button type="button" v-if="editingLog>=0" @click="cancelEditing">Cancel</button>
           <button type="submit" style="margin:2px">Submit</button>
         </div>
@@ -346,11 +205,11 @@ th, td {
         <div id="filter-div">
           <div>
             <label for="start">Start:</label>
-            <input type="datetime-local" name="start" v-model="newSortFilters.start" >
+            <DTInput v-model="newSortFilters" valname="start"></DTInput>
           </div>
           <div>
             <label for="end">End:</label>
-            <input type="datetime-local" name="end" v-model="newSortFilters.end" >
+            <DTInput v-model="newSortFilters" valname="end"></DTInput>
           </div>
 
           <div>
@@ -371,7 +230,7 @@ th, td {
         <hr style="width:90%" >
 
         <div id="reset-cancel-buttons-div">
-          <button onclick="cancelSortFilters()">Cancel</button>
+          <button @click="cancelSortFilters()">Cancel</button>
           <button type="submit">Apply</button>
           <button onclick="resetSortFilters()">Reset</button>
         </div>

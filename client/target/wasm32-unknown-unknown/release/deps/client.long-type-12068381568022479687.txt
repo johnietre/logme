@@ -1,0 +1,1 @@
+impl Future<Output = std::result::Result<web_sys::Response, Box<(dyn StdError + Send + std::marker::Sync + 'static)>>>

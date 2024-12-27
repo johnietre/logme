@@ -1,0 +1,1 @@
+impl Future<Output = std::result::Result<wasm_bindgen::JsValue, Box<(dyn StdError + Send + std::marker::Sync + 'static)>>>

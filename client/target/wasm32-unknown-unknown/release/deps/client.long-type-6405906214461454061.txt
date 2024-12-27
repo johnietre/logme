@@ -1,0 +1,1 @@
+leptos::html::HtmlElement<Option_, (Attr<leptos::attr::Value, {closure@src/app.rs:146:31: 146:38}>,), (leptos::tachys::view::static_types::Static<"Time">,)>

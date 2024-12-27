@@ -1,0 +1,1 @@
+leptos::prelude::View<leptos::html::HtmlElement<Button, (On<click, {closure@src/app.rs:246:38: 246:46}>,), (leptos::tachys::view::static_types::Static<"Go To Registration">,)>>

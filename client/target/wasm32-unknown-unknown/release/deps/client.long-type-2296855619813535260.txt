@@ -1,0 +1,1 @@
+leptos::html::HtmlElement<Input, (Attr<Type, leptos::tachys::view::static_types::Static<"checkbox">>, Property<&str, {closure@src/app.rs:306:38: 306:45}>), ()>

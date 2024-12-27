@@ -1,0 +1,88 @@
+h1, h2, h3 {
+  text-align: center;
+}
+
+table, th, td {
+  border: 1px solid black;
+  border-collapse: collapse;
+}
+
+th, td {
+  padding: 5px;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+
+.flex-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Firefox */
+.no-number-arrows {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Others */
+.no-number-arrows::-webkit-outer-spin-button,
+.no-number-arrows::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+#header {
+  width: 100%;
+  text-align: center;
+  border-bottom: 2px solid black;
+  margin-bottom: 15px;
+}
+
+#title {
+  margin: 5px 0;
+}
+
+#new-log-form {
+  width: 100%;
+}
+
+#sort-filtShowers-form {
+  border: 1px solid black;
+  margin: 2px;
+}
+
+#sort-div > div {
+  display: inline-block;
+  margin: 2px;
+}
+
+#filter-div > div {
+  margin: 2px;
+}
+
+#reset-cancel-buttons-div {
+  width: 100%;
+}
+
+#reset-cancel-buttons-div > button {
+  margin: 2px;
+}
+
+#reset-cancel-buttons-div > button:last-child {
+  float: right;
+}
+
+#check-buttons > button {
+  margin: 0px 5px 2px 5px;
+}
+
+#login-form > div, #register-form > div {
+  margin: 2px;
+}
+
+#logout-button-div {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+}

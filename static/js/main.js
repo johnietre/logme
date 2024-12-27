@@ -1,19 +1,16 @@
-import { DTInput, DateTimeInput, daysInMonth } from "/static/js/DTInput.js";
+// TODO: changing the entire "newLog" in the App doesn't update the DTInput
+import { DTInput, DateTime, daysInMonth } from "/static/js/DTInput.js";
 //import DTInput from "/static/js/DTInput.js";
 
 (function() {
   // TODO: start/stop
 
-function dtlStrToTs(str) {
-  return Math.floor((new Date(str)).getTime() / 1000);
-}
-
 function defaultSortFilters() {
   return {
     sort: "timestamp",
     desc: true,
-    start: "",
-    end: "",
+    start: 0,
+    end: 0,
     limit: 50,
     offset: 0
   };
@@ -26,10 +23,22 @@ function newUser() {
   };
 }
 
+function newLog() {
+  return {
+    id: 0,
+    timestamp: 0,
+    msg: "",
+    tags: [],
+    couterpartId: null,
+  };
+}
+
 const App = {
   data() {
     return {
-      testModel: new DateTimeInput(),
+      testModel: new DateTime(),
+      testTimestamp: (new DateTime()).toTimestamp(),
+      test: {timestamp: 0},
 
       user: newUser(),
       password: "",
@@ -38,10 +47,10 @@ const App = {
       registering: false,
       tokStr: "",
 
-      dateTimeInput: new DateTimeInput(),
+      dateTimeInput: new DateTime(),
       showingDateTimePopup: false,
 
-      newLog: {},
+      newLog: newLog(),
       logs: [],
       checkedLogs: [],
 
@@ -55,6 +64,8 @@ const App = {
     };
   },
   async mounted() {
+    //setInterval(() => console.log(this.testModel.toTimestamp()), 1000);
+    //setInterval(() => console.log(this.testTimestamp), 1000);
     await this.getUser();
     if (this.loggedIn) {
       await this.getLogs();
@@ -67,12 +78,21 @@ const App = {
         "/token",
         this.newFetchParams("POST", {"Authorization": `Basic ${authStr}`}),
       );
+      const text = await resp.text();
+      let jsResp;
+      try {
+        jsResp = JSON.parse(text);
+      } catch {
+        console.log("bad response JSON:", text);
+        alert(`Received bad response from server`);
+        return;
+      }
       if (!resp.ok) {
-        alert(`Error logging in: ${await resp.text()}`);
+        alert(`Error logging in: ${jsResp.error}`);
         return;
       }
       if (!navigator.cookieEnabled) {
-        this.tokStr = await resp.text();
+        this.tokStr = jsResp.content;
       }
       this.loggedIn = true, this.registering = false;
       this.password = "";
@@ -101,8 +121,17 @@ const App = {
         alert(`Error registering: ${await this.textOrDefault(resp)}`);
         return;
       }
+      const text = await resp.text();
+      let jsResp;
+      try {
+        jsResp = JSON.parse(text);
+      } catch {
+        console.log("bad response JSON:", text);
+        alert(`Received bad response from server`);
+        return;
+      }
       if (!navigator.cookieEnabled) {
-        this.tokStr = await resp.text();
+        this.tokStr = jsResp.content;
       }
       this.registering = false;
       this.passwordConf = "";
@@ -122,7 +151,16 @@ const App = {
         this.loggedIn = false;
         return;
       }
-      this.user = await resp.json();
+      const text = await resp.text();
+      let jsResp;
+      try {
+        jsResp = JSON.parse(text);
+      } catch {
+        console.log("bad response JSON:", text);
+        alert(`Received bad response from server`);
+        return;
+      }
+      this.user = jsResp.content;
       this.loggedIn = true;
     },
     async getLogs() {
@@ -135,11 +173,19 @@ const App = {
         `limit=${this.sortFilters.limit}`,
         `offset=${this.sortFilters.offset}`
       ];
+      /*
       if (this.sortFilters.start != "") {
         parts.push(`start=${dtlStrToTs(this.sortFilters.start)}`);
       }
       if (this.sortFilters.end != "") {
         parts.push(`end=${dtlStrToTs(this.sortFilters.end)}`);
+      }
+      */
+      if (this.sortFilters.start != 0) {
+        parts.push(`start=${this.sortFilters.start}`);
+      }
+      if (this.sortFilters.end != 0) {
+        parts.push(`end=${this.sortFilters.end}`);
       }
 
       const query = parts.join("&");
@@ -148,21 +194,26 @@ const App = {
         return;
       }
 
-      const json = await resp.json();
-      this.logs = json.logs ?? [];
+      const text = await resp.text();
+      let jsResp;
+      try {
+        jsResp = JSON.parse(text);
+      } catch {
+        console.log("bad response JSON:", text);
+        alert(`Received bad response from server`);
+        return;
+      }
+      this.logs = jsResp.content ?? [];
       this.checkedLogs = Array(this.logs.length).fill(false);
-      if (json.error !== undefined) {
-        alert(`Partial error: ${json.error}`);
+      if (jsResp.error !== undefined) {
+        alert(`Partial error: ${jsResp.error}`);
       } else {
         //alert("Success");
       }
     },
     async submitLog(ev) {
       ev.preventDefault();
-      let timestamp = undefined;
-      if (this.newLog.timestamp != "") {
-        timestamp = Math.floor((new Date(this.newLog.timestamp)).getTime() / 1000);
-      }
+      let timestamp = this.newLog.timestamp;
       const log = {"timestamp": timestamp, "msg": this.newLog.msg};
       let url, method;
       if (this.editingLog < 0) {
@@ -172,15 +223,24 @@ const App = {
         url = `/logs?id=${this.newLog.id}`;
         method = "PUT";
       }
-      this.newLog = {};
+      this.newLog = newLog();
       this.editingLog = -1;
       const resp = await fetch(url, {
         "method": method,
         "headers": {"Authorization": `Basic ${this.authStr}`},
         "body": JSON.stringify(log)
       });
+      const text = await resp.text();
+      let jsResp;
+      try {
+        jsResp = JSON.parse(text);
+      } catch {
+        console.log("bad response JSON:", text);
+        alert(`Received bad response from server`);
+        return;
+      }
       if (!resp.ok) {
-        alert(await resp.text());
+        alert(jsResp.error);
         return;
       }
       //alert("Success");
@@ -202,8 +262,17 @@ const App = {
         "method": "DELETE",
         "headers": {"Authorization": `Basic ${this.authStr}`}
       });
+      const text = await resp.text();
+      let jsResp;
+      try {
+        jsResp = JSON.parse(text);
+      } catch {
+        console.log("bad response JSON:", text);
+        alert(`Received bad response from server`);
+        return;
+      }
       if (!resp.ok) {
-        alert(await resp.text());
+        alert(jsResp.error);
       } else {
         //alert("Success");
         await this.getLogs();
@@ -247,16 +316,20 @@ const App = {
       return false;
     },
     async textOrDefault(resp) {
-      const text = await resp.text();
+      let text = await resp.text();
+      let jsResp;
+      try {
+        jsResp = JSON.parse(text);
+        text = jsResp.error ?? "";
+      } catch {
+        console.log("bad response JSON:", text);
+        alert(`Received bad response from server`);
+        return;
+      }
       if (text !== "") {
         return text;
       }
       return resp.statusText;
-    },
-    setTimestampNow() {
-      const now = new Date();
-      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-      this.newLog.timestamp = now.toISOString().slice(0, 16);
     },
     resetSortFilters() {
       //this.showingSortFilters = false;
@@ -273,13 +346,10 @@ const App = {
       }
       this.editingLog = i;
       this.newLog = Object.assign({}, this.logs[i]);
-      const dt = new Date(this.newLog.timestamp * 1000);
-      dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
-      this.newLog.timestamp = dt.toISOString().slice(0, 16);
     },
     cancelEditing() {
       this.editingLog = -1;
-      this.newLog = {};
+      this.newLog = newLog();
     },
     uncheckAll() {
       this.checkedLogs = Array(this.logs.length).fill(false);
