@@ -1,1 +1,0 @@
-leptos::prelude::View<leptos::html::HtmlElement<leptos::html::Span, (CustomAttr<&str, bool>,), (leptos::tachys::view::static_types::Static<"Show Sort/Filters">,)>>

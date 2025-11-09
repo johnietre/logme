@@ -1,1 +1,0 @@
-leptos::html::HtmlElement<Input, (Attr<Type, leptos::tachys::view::static_types::Static<"checkbox">>,), ()>

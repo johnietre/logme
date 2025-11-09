@@ -1,9 +1,0 @@
-/mnt/c/Users/johni/Desktop/Programming/github.com/johnietre/logme/client/target/wasm32-unknown-unknown/release/deps/libwasm_bindgen_futures-10a6a63503fcc9cd.rmeta: /home/johnierodgers/.cargo/registry/src/index.crates.io-6f17d22bba15001f/wasm-bindgen-futures-0.4.49/src/lib.rs /home/johnierodgers/.cargo/registry/src/index.crates.io-6f17d22bba15001f/wasm-bindgen-futures-0.4.49/src/queue.rs /home/johnierodgers/.cargo/registry/src/index.crates.io-6f17d22bba15001f/wasm-bindgen-futures-0.4.49/src/task/singlethread.rs
-
-/mnt/c/Users/johni/Desktop/Programming/github.com/johnietre/logme/client/target/wasm32-unknown-unknown/release/deps/libwasm_bindgen_futures-10a6a63503fcc9cd.rlib: /home/johnierodgers/.cargo/registry/src/index.crates.io-6f17d22bba15001f/wasm-bindgen-futures-0.4.49/src/lib.rs /home/johnierodgers/.cargo/registry/src/index.crates.io-6f17d22bba15001f/wasm-bindgen-futures-0.4.49/src/queue.rs /home/johnierodgers/.cargo/registry/src/index.crates.io-6f17d22bba15001f/wasm-bindgen-futures-0.4.49/src/task/singlethread.rs
-
-/mnt/c/Users/johni/Desktop/Programming/github.com/johnietre/logme/client/target/wasm32-unknown-unknown/release/deps/wasm_bindgen_futures-10a6a63503fcc9cd.d: /home/johnierodgers/.cargo/registry/src/index.crates.io-6f17d22bba15001f/wasm-bindgen-futures-0.4.49/src/lib.rs /home/johnierodgers/.cargo/registry/src/index.crates.io-6f17d22bba15001f/wasm-bindgen-futures-0.4.49/src/queue.rs /home/johnierodgers/.cargo/registry/src/index.crates.io-6f17d22bba15001f/wasm-bindgen-futures-0.4.49/src/task/singlethread.rs
-
-/home/johnierodgers/.cargo/registry/src/index.crates.io-6f17d22bba15001f/wasm-bindgen-futures-0.4.49/src/lib.rs:
-/home/johnierodgers/.cargo/registry/src/index.crates.io-6f17d22bba15001f/wasm-bindgen-futures-0.4.49/src/queue.rs:
-/home/johnierodgers/.cargo/registry/src/index.crates.io-6f17d22bba15001f/wasm-bindgen-futures-0.4.49/src/task/singlethread.rs:
